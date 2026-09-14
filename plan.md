@@ -1,0 +1,93 @@
+# KING OF LUNCH implementation plan
+
+Status: proposed, self-reviewed, awaiting owner review. This commit contains documentation and the supplied logo only. Implementation starts after review and next steps.
+
+## Outcome and scope
+
+Build an extremely lightweight, read-only Markdown viewer for macOS. `kol <filename>` opens a rendered document in a native window. Finder can open `.md` files with the app, and the user can select it as their default handler. ⌘R rereads the file; ⌘+, ⌘−, and ⌘0 adjust font size. Rendering includes tables and syntax-colored fenced code blocks, with vertical and horizontal scrolling wherever needed.
+
+No editing, file watching, sidebar, tabs, library, plugins, cloud features, embedded terminal, search feature, export, or preferences window in v1. Standard selection, copy, window controls, and menus remain available.
+
+## Recommended tools
+
+**Swift + AppKit + system WKWebView**, with a native Markdown parser and a small bundled syntax highlighter. This is a native compiled Mac application with a WebKit document surface. It is not a fully native text-layout implementation or a single self-contained executable: Finder integration calls for an `.app` bundle containing its executable, metadata, icon, and rendering assets. A separate small compiled `kol` launcher accompanies it.
+
+| Tool | Purpose and rationale |
+| --- | --- |
+| Swift and AppKit | Direct access to macOS windows, menu shortcuts, file-open events, and application lifecycle, without a cross-platform GUI bridge. |
+| WKWebView | System HTML/CSS layout for tables, code, links, selection, accessibility, and overflow. No bundled browser engine or local HTTP server. |
+| cmark-gfm, statically linked | CommonMark parsing and HTML output with explicit GFM table, strikethrough, autolink, and task-list extensions. Use a small C interop boundary and pin the upstream revision. |
+| highlight.js, bundled custom build | Highlight a bounded set of fenced-code languages offline. Pin and check in the generated asset and provenance; no CDN or Node runtime at launch. |
+| Swift Package Manager + a small packaging script | Build Swift targets and the vendored C target, run tests, and assemble the app bundle. Check in required generated C headers; use upstream CMake only if needed to prepare the vendored source. |
+| XCTest and Instruments | Focused behavior tests, native integration checks, startup timing, and aggregate memory measurement. |
+
+**Why not Go?** Go is a reasonable parser/CLI choice, but this app's work is primarily macOS integration and document presentation. A Go implementation would still need an AppKit/WebKit bridge or GUI framework. Swift keeps those calls direct and avoids adding a second language runtime for a small amount of application logic. This is an architectural judgment, not a measured claim that Swift is always smaller or faster.
+
+**Why not NSTextView?** It could reduce rendering-process overhead, but polished GFM tables, rich layout, and highlighting would require more custom work. WebKit is the preferred starting point, conditional on the performance gate below. Electron is outside the lightweight brief; a cross-platform framework adds little value for a Mac-only app.
+
+## Reading surface
+
+The audience is someone opening local notes or project documentation from Terminal or Finder. The document is the focal point. Use a standard resizable window, filename in the title bar, and native menus; no persistent toolbar is necessary. Keep the supplied logo in documentation and derive a properly sized app icon during packaging, rather than placing branding above every document.
+
+Use **Kanagawa Wave** consistently, with system UI text and a system monospace font for code. Starting tokens: background `#1F1F28`, foreground `#DCD7BA`, code background `#16161D`, links/functions `#7E9CD8`, strings `#98BB6C`, keywords `#957FB8`, and numbers `#D27E99`. Verify contrast and token mapping on real rendered content before release. Use comfortable margins, a readable prose measure, clear heading levels, and subtle table separators; preserve native focus indicators and selectable text.
+
+Prose wraps to the available width. Code retains whitespace and does not wrap by default. Wide code blocks and tables get horizontal scroll containers, while the document scrolls vertically. Ensure any remaining oversized content is reachable rather than clipped. Respect macOS scrollbar preferences and trackpad gestures. Verify keyboard access to scrollable regions and VoiceOver reading order.
+
+## Behavior and architecture
+
+1. **Opening.** A single file-open path handles CLI and Finder URLs. One window per file; reopening the same normalized file URL focuses its existing window. Distinct files get distinct windows. Launching the app without a file shows the native Open dialog; ⌘O can open another document.
+2. **CLI.** A small Swift launcher resolves the argument against the caller's working directory, validates that it is a readable regular file, and opens it with this app through `NSWorkspace`. Use file URLs rather than shell command interpolation. Support spaces, Unicode, absolute/relative paths, and `--` for names beginning with a dash. Invalid arguments, missing app, or unreadable paths produce a concise stderr message and nonzero status. Success means the open request was accepted, not that asynchronous rendering finished. Do not route through the current default `.md` app. Locate this app by bundle identifier, with an explicit packaged-location fallback.
+3. **State.** A document controller owns its file URL, zoom, and render generation. A window controller owns the WebKit view. Read and parse off the main thread; display on the main thread. Discard stale render results if a newer reload supersedes them.
+4. **Rendering.** Read UTF-8, tolerating a BOM and ordinary line-ending differences; clearly report unsupported encoding. Parse with GFM extensions, generate a fixed HTML shell and theme CSS, and highlight recognized language fences. Initial languages: Bash/shell, C, C++, CSS, Go, HTML/XML, JavaScript, JSON, Markdown, Python, Rust, SQL, Swift, TypeScript, and YAML. Unknown or unlabelled fences remain legible plain code; avoid costly automatic language guessing.
+5. **Reload.** ⌘R explicitly rereads disk and refreshes relative images. Preserve zoom and restore the closest practical scroll position, clamped when the document shrinks. An empty file is a valid empty document. If reload fails, retain the last successful rendering and show a native error identifying the file. Do not install filesystem watchers or polling timers.
+6. **Zoom.** Menu actions apply to the focused document even when the web view has keyboard focus. Start at 16 px body text, use 2 px steps with 10–32 px bounds, and reset to 16 px. Scale headings, tables, and code proportionally using relative units, rather than page magnification. Accept ⌘= as well as ⌘+ on applicable keyboard layouts. Zoom is per-window and lasts for that window's lifetime; persistence is outside v1.
+7. **Finder.** Declare Markdown document types with Viewer role and an appropriate imported type conforming to plain text. Verify existing system Markdown identifiers before finalizing metadata. Handle open events both at cold launch and while running. Register as an eligible handler without claiming exclusive ownership or changing user defaults.
+
+## Local content handling
+
+Documents must not execute scripts. Disable raw HTML in the Markdown parser for v1, escape generated attributes, reject unsafe URL schemes, and apply a restrictive content security policy. Run only the app's bundled highlighter; expose no native scripting bridge. Raw HTML, including HTML tables and embedded widgets, is intentionally outside the supported Markdown subset and should be documented in the release README.
+
+Resolve relative images against the document directory with bounded file access, including symlink containment checks. Start with images inside that directory or its descendants; parent-directory images are an explicit limitation to validate during the spike. Block remote image loads in v1 so opening a document remains offline. Preserve internal anchor navigation, open clicked HTTP(S) links in the default browser, and route clicked local Markdown links through the app's open path. Other local targets and schemes remain blocked. Missing or blocked images should preserve useful alt text. Validate the WKWebView loading strategy and resource boundary before building the rest of the viewer.
+
+## Delivery and size
+
+Proposed baseline: macOS 13+, first measured on Apple silicon. Produce an arm64 app initially; add a universal arm64/x86_64 artifact only after testing on both architectures. The minimum OS and Intel support are reviewable assumptions, not established requirements.
+
+Ship `KING OF LUNCH.app` and a native `kol` launcher; no installed language runtime or package manager is required by users. Provide a documented, optional way to place the launcher in a user-selected directory on PATH. Do not silently modify shell profiles. Use a stable bundle identifier chosen before distribution. Public distribution will need Developer ID signing and notarization when credentials are available; local development builds can precede that. Preserve upstream licenses and pin dependency versions; the project's own license remains an owner decision.
+
+Small download size does not imply small runtime memory: WebKit uses helper processes. Initial engineering targets, **not measured promises**, are an uncompressed arm64 app plus launcher under 15 MiB, cold first render of a 100 KiB fixture under 500 ms, warm open/reload under 150 ms, and combined app/WebKit idle memory under 150 MiB for that fixture. Record hardware, OS, release-build settings, first-run conditions, median and p95 over repeated runs, and all related processes. Check for near-zero idle CPU and no retained document views after repeated open/close cycles. If targets fail, report the evidence and revisit the renderer before feature work expands.
+
+## Implementation sequence and acceptance
+
+1. **Rendering and performance spike.** Build one AppKit window rendering a fixture with prose, a wide table, highlighted code, and a local image. Exercise CSS font zoom and restricted resource loading. Measure the release bundle, cold/warm timing, and full WebKit memory footprint. Gate: acceptable rendering and measured lightweight behavior; otherwise revisit architecture with the owner.
+2. **Document lifecycle and controls.** Add the common open path, reload, per-window zoom, native menus, error handling, and multiple-window behavior. Gate: all required shortcuts work with content focused; reload preserves zoom and does not silently update before ⌘R.
+3. **CLI and Finder integration.** Build the launcher and bundle metadata; test a fresh app launch and an already-running app, filename edge cases, and user-selected default handling. Gate: both opening paths reach the correct document and CLI errors are actionable.
+4. **Rendering verification and packaging.** Finish palette/highlight mapping, scrolling, icon generation, and reproducible release packaging. Add installation instructions only after testing them. Gate: the acceptance matrix below passes and performance remains within agreed targets.
+
+| Area | Evidence required |
+| --- | --- |
+| Markdown | Fixtures for headings, emphasis, nested lists, blockquotes, links, images, task lists, aligned tables, fenced/indented code, Unicode, and malformed syntax; parser/output assertions for structure and escaping. |
+| Code and overflow | Known language colors, unknown language fallback, long unbroken lines, wide tables, narrow windows, and both font-size bounds; inspect rendered output and keyboard/trackpad scrolling. |
+| Files and reload | Empty/missing/unreadable/deleted/replaced files, invalid encoding, rapid reloads, multiple windows, and preservation of the last successful rendering on failure. |
+| Integration | CLI from another working directory; paths with spaces, Unicode, and leading dashes; Finder cold/warm opens; default-handler selection on a test file; no default changed during installation. |
+| Content boundaries | Raw script HTML, unsafe links, remote images, escaping paths, and symlinks cannot execute or fetch unintended content; permitted local images and external browser links work. |
+| Lightweight behavior | Release measurements for a typical 100 KiB document plus 1 MiB and 10 MiB stress fixtures; bound highlighting work on oversized blocks and retain readable plain code if it exceeds the budget. |
+| Native usability | Selection/copy, focused-window shortcuts, menu enabled states, VoiceOver, resize, and correct scrollbar behavior. |
+
+## Self-review
+
+- All requested features map to an implementation step and acceptance check. No application code is part of this planning commit.
+- The key tradeoff is explicit: Swift/AppKit gives native integration; system WebKit gives reliable rich layout but adds process/memory overhead. The first milestone measures whether that tradeoff satisfies “extremely lightweight.”
+- Packaging reconciles the native-binary request with Finder's app-bundle requirements. The launcher hands off via native APIs, avoiding shell quoting and wrong-default-app failures.
+- Rendering scope is bounded: GFM tables and common code languages are included; arbitrary HTML, remote images, and images outside the document directory are excluded initially. These limitations should be reviewed against expected documents.
+- No numerical performance claim is presented as tested. The minimum OS, architecture support, default font sizing, dependency selection, bundle identifier, and release license remain proposed or pending as stated above.
+- Next action: owner reviews this plan and supplies next steps before implementation.
+
+## Technical references
+
+- [Apple: WKWebView](https://developer.apple.com/documentation/webkit/wkwebview) — system document rendering surface.
+- [Apple: application file-open events](https://developer.apple.com/documentation/appkit/nsapplicationdelegate/application(_:open:)) — Finder and running-app URL delivery.
+- [Apple: CFBundleDocumentTypes](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundledocumenttypes) — declaring supported document types.
+- [cmark-gfm](https://github.com/github/cmark-gfm) and [GFM specification](https://github.github.io/gfm/) — parser, HTML output, and Markdown extensions.
+- [highlight.js](https://highlightjs.org/) — bundled syntax highlighting.
+- [Kanagawa palette](https://github.com/rebelot/kanagawa.nvim/blob/master/lua/kanagawa/colors.lua) — source color values.

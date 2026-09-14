@@ -1,0 +1,33 @@
+# macOS metadata
+.DS_Store
+._*
+.Spotlight-V100/
+.Trashes/
+
+# Swift Package Manager and Xcode local state
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Generated builds, packaging, and profiling output
+/build/
+/dist/
+*.app/
+*.dSYM/
+*.xcarchive/
+*.trace/
+*.profraw
+*.profdata
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+
+# Local signing credentials
+*.p12
+*.p8
+
+# Keep Package.resolved, source assets, and third-party licenses tracked.
