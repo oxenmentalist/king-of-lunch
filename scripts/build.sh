@@ -60,6 +60,7 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
+cp LICENSE "$APP/Contents/Resources/LICENSE"
 if [[ -d licenses ]]; then
     cp -R licenses "$APP/Contents/Resources/"
 fi

@@ -88,3 +88,5 @@ make package
 To use an extracted ZIP, keep `kol` beside `KING OF LUNCH.app` and run `./kol <filename>`, or open the app directly. Running a packaged build does not require Go or Command Line Tools.
 
 The implementation uses Go, a thin Objective-C/cgo bridge to AppKit, system WebKit, Goldmark, and Chroma. No browser engine is bundled. Colors are based on [Kanagawa by rebelot](https://github.com/rebelot/kanagawa.nvim); dependency licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). See [plan.md](plan.md) for the original design and implementation decisions.
+
+Licensed under the [MIT License](LICENSE). Copyright © 2026 oxenmentalist.

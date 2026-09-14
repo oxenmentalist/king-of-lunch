@@ -12,4 +12,4 @@ KING OF LUNCH uses the following open-source components. Their original license 
 
 The Kanagawa Wave palette is adapted for a reading surface, including brighter comment text for readability. Chroma's upstream `COPYING` is preserved in full, including its font notice; KING OF LUNCH uses Chroma's HTML formatter and system fonts, and does not link its SVG formatter or bundled font.
 
-Apple's AppKit and WebKit are system frameworks supplied by macOS and are not bundled with the application. This notice does not establish a license for KING OF LUNCH itself or its supplied project logo.
+Apple's AppKit and WebKit are system frameworks supplied by macOS and are not bundled with the application. KING OF LUNCH is licensed under the [MIT License](LICENSE). Third-party components retain their respective licenses listed above.
