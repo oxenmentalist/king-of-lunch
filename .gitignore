@@ -4,12 +4,10 @@
 .Spotlight-V100/
 .Trashes/
 
-# Swift Package Manager and Xcode local state
-.build/
-.swiftpm/
-DerivedData/
-xcuserdata/
-*.xcuserstate
+# Go test and coverage output
+*.test
+/coverage.out
+/coverage.html
 
 # Generated builds, packaging, and profiling output
 /build/
@@ -30,4 +28,4 @@ xcuserdata/
 *.p12
 *.p8
 
-# Keep Package.resolved, source assets, and third-party licenses tracked.
+# Keep go.mod, go.sum, source assets, and third-party licenses tracked.

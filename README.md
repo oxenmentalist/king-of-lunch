@@ -34,6 +34,8 @@ The planned app will support opening `.md` files directly from Finder. Once a re
 
 ## Installation
 
-No release is available yet. The intended distribution is `KING OF LUNCH.app` with a small native `kol` command-line launcher. End users will not need Go, Node.js, or developer tools. Installation and build instructions will be added when they have been tested.
+No release is available yet. This is first and foremost a personal tool, intended to be built locally with **Go and Apple Command Line Tools**. No Apple developer account is required for local builds. The build will produce `KING OF LUNCH.app` and a small native `kol` command-line launcher.
+
+Tested build and installation instructions will be added during implementation. Prebuilt binaries may follow through GitHub Releases; those will not require a Go toolchain to run.
 
 Colors are based on [Kanagawa by rebelot](https://github.com/rebelot/kanagawa.nvim).
