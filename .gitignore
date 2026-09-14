@@ -4,6 +4,11 @@
 .Spotlight-V100/
 .Trashes/
 
+# Direct go build output
+/kol
+/king-of-lunch
+/kol-check
+
 # Go test and coverage output
 *.test
 /coverage.out

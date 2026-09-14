@@ -1,6 +1,6 @@
 # KING OF LUNCH implementation plan
 
-Status: proposed, self-reviewed, awaiting owner review. This commit contains documentation and the supplied logo only. Implementation starts after review and next steps.
+Status: implementation authorized and built. Go plus Apple Command Line Tools was accepted during review. This document preserves the design and acceptance criteria; measured results and platform coverage are recorded in [docs/validation.md](docs/validation.md).
 
 ## Outcome and scope
 
@@ -46,7 +46,7 @@ Prose wraps to the available width. Code retains whitespace and does not wrap by
 
 ## Local content handling
 
-Documents must not execute scripts. Disable raw HTML in the Markdown parser for v1, escape generated attributes, reject unsafe URL schemes, and apply a restrictive content security policy. Highlight in Go before loading HTML; disable document JavaScript and expose no page-to-native scripting bridge. Any app-controlled DOM operations needed for zoom and scroll restoration must remain fixed, trusted operations, with the behavior verified in the spike. Raw HTML, including HTML tables and embedded widgets, is intentionally outside the supported Markdown subset and should be documented in the release README.
+Documents must not execute scripts. Disable raw HTML in the Markdown parser for v1, escape generated attributes, reject unsafe URL schemes, and apply a restrictive content security policy. Highlight in Go before loading HTML; disable document JavaScript and expose no page-to-native scripting bridge. App-owned zoom, anchor navigation, scroll restoration, and horizontal keyboard/wheel controls execute in an isolated WebKit content world. These fixed controls are bundled with the app; Markdown cannot supply scripts. Raw HTML, including HTML tables and embedded widgets, is intentionally outside the supported Markdown subset and should be documented in the release README.
 
 Resolve relative images against the document directory with bounded file access, including symlink containment checks. Start with images inside that directory or its descendants; parent-directory images are an explicit limitation to validate during the spike. Block remote image loads in v1 so opening a document remains offline. Preserve internal anchor navigation, open clicked HTTP(S) links in the default browser, and route clicked local Markdown links through the app's open path. Other local targets and schemes remain blocked. Missing or blocked images should preserve useful alt text. Validate the WKWebView loading strategy and resource boundary before building the rest of the viewer.
 
@@ -79,12 +79,15 @@ Small download size does not imply small runtime memory: WebKit uses helper proc
 
 ## Self-review
 
-- All requested features map to an implementation step and acceptance check. No application code is part of this planning commit.
+- All requested features map to an implementation step and acceptance check. The application, source-build scripts, fixtures, and native diagnostic are now implemented.
 - The key tradeoff is explicit: Go fits the personal source-build workflow; a small cgo/AppKit bridge supplies native integration; system WebKit gives reliable rich layout but adds process/memory overhead. Go runtime and linked highlighter size must also be measured. The first milestone measures whether that tradeoff satisfies “extremely lightweight.”
 - Packaging reconciles the native-binary request with Finder's app-bundle requirements. The launcher hands off via native APIs, avoiding shell quoting and wrong-default-app failures.
 - Rendering scope is bounded: GFM tables and common code languages are included; arbitrary HTML, remote images, and images outside the document directory are excluded initially. These limitations should be reviewed against expected documents.
 - No numerical performance claim is presented as tested. The minimum OS, architecture support, default font sizing, dependency selection, bundle identifier, and release license remain proposed or pending as stated above.
-- Go plus Apple Command Line Tools is accepted. The remaining plan is still for owner review; implementation awaits next steps.
+- Go plus Apple Command Line Tools is the implemented toolchain. Goldmark 1.8.6 and Chroma 2.27.0 are pinned. Local images are embedded into HTML after bounded reads, so the WebKit view receives no filesystem access. A private document base URL enables internal anchors without a server, and app-private link URLs route local Markdown clicks through the native delegate. Windows share a nonpersistent WebKit data store to reduce warm-open overhead. Reload work is coalesced per document and limited to two active renderers across the app.
+- Implementation adds a 64 MiB document limit, 8 MiB/24-megapixel individual image limits, and a 24 MiB total image budget. Large or slow code blocks fall back to plain text. These bounds preserve responsiveness on accidental oversized input.
+- Public signing/notarization and Intel/older-macOS runtime testing remain outside the completed local Apple-silicon validation.
+- The implementation was retained after measurement: the app plus launcher is about 9.7 MiB; representative combined physical footprint was 101 MB. Earlier median cold and warm opens reached the initial targets, while observed tail samples and the final warm-open median were slower. These measurements support the chosen architecture; the timing variation remains a documented performance limitation.
 
 ## Technical references
 
