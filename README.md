@@ -54,6 +54,9 @@ Use `make install` again to update. Quit the running app before replacing it. To
 | ⌘0 | Reset font size |
 | ⌘C / ⌘A | Copy / select all |
 | ⌘W / ⌘Q | Close the window / quit |
+| Ctrl-U / Ctrl-D | Scroll up / down half a window |
+| G (Shift-G) | Go to the bottom of the document |
+| gg | Go to the top of the document |
 
 Font size ranges from 10–32 px in 2 px steps, starting at 16 px. Each window keeps its own zoom until closed. Reload preserves zoom and the nearest available scroll position. If the file cannot be read, the previous successful rendering stays visible and an error explains what happened.
 

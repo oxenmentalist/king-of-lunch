@@ -1,8 +1,44 @@
 // App-owned controls execute only in an isolated WKContentWorld. Markdown
-// cannot supply scripts or reach this world. Native WebKit handles vertical
-// scrolling; these handlers make horizontal overflow predictable with a
-// keyboard, horizontal wheel, or Shift-wheel.
+// cannot supply scripts or reach this world. These handlers add Vim document
+// navigation and predictable horizontal overflow controls.
 (() => {
+  let pendingG = false;
+  const resetSequence = () => { pendingG = false; };
+
+  document.addEventListener('focusin', resetSequence);
+  document.addEventListener('pointerdown', resetSequence);
+  window.addEventListener('blur', resetSequence);
+
+  document.addEventListener('keydown', event => {
+    const target = event.target;
+    if (event.defaultPrevented || event.isComposing || event.metaKey || event.altKey ||
+        (target instanceof Element &&
+          (target.closest('input, textarea, select') || target.isContentEditable))) {
+      resetSequence();
+      return;
+    }
+
+    const secondG = pendingG;
+    resetSequence();
+    const page = document.scrollingElement;
+    if (!page) return;
+
+    if (event.ctrlKey && !event.shiftKey && (event.key === 'u' || event.key === 'd')) {
+      page.scrollTop += (event.key === 'd' ? 1 : -1) * document.documentElement.clientHeight / 2;
+    } else if (!event.ctrlKey && event.key === 'G') {
+      page.scrollTop = page.scrollHeight;
+    } else if (!event.ctrlKey && !event.shiftKey && event.key === 'g') {
+      // Holding g must not turn key repeat into a two-key command.
+      if (!event.repeat) {
+        if (secondG) page.scrollTop = 0;
+        else pendingG = true;
+      }
+    } else {
+      return;
+    }
+    event.preventDefault();
+  });
+
   function scrollable(element) {
     return element instanceof Element &&
       element.matches('pre, .table-scroll') &&

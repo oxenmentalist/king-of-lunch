@@ -213,6 +213,136 @@ func (s *suite) checkControls(id uint64, selector string) {
 	s.check(selector+" boundary input is not prevented", boundaryPassed, boundary)
 }
 
+// Navigation checks dispatch DOM events through the installed WKWebView handlers.
+// Physical keyboard delivery and native default shortcuts are outside this check.
+func (s *suite) checkVimNavigation(id uint64) {
+	value := s.evaluate(id, `(() => {
+	  const results = [];
+	  const record = (name, passed, detail) => results.push({name, passed, detail});
+	  const root = document.documentElement;
+	  const max = root.scrollHeight - root.clientHeight;
+	  const half = root.clientHeight / 2;
+	  const middle = Math.min(2000, Math.floor(max / 2));
+	  const near = (actual, expected) => Math.abs(actual - expected) <= 1;
+	  const key = (name, options = {}, target = document.body, prevented = false) => {
+	    const event = new KeyboardEvent('keydown', {key:name, bubbles:true, cancelable:true, ...options});
+	    if (prevented) event.preventDefault();
+	    target.dispatchEvent(event);
+	    return {y:scrollY, prevented:event.defaultPrevented};
+	  };
+	  const reset = () => {
+	    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+	    key('Escape');
+	    window.scrollTo(0, middle);
+	  };
+	  record('vim fixture has room for half-page navigation', middle > half && max > middle + half, {max, half, middle});
+	  reset();
+	  const down = key('d', {ctrlKey:true});
+	  const up = key('u', {ctrlKey:true});
+	  record('Ctrl-d and Ctrl-u move half the viewport and return', near(down.y, middle + half) && near(up.y, middle) && down.prevented && up.prevented, {down, up, half});
+	  window.scrollTo(0, max - 10);
+	  const bottomClamp = key('d', {ctrlKey:true});
+	  window.scrollTo(0, 10);
+	  const topClamp = key('u', {ctrlKey:true});
+	  record('Ctrl-d and Ctrl-u clamp at document boundaries', near(bottomClamp.y, max) && topClamp.y === 0, {bottomClamp, topClamp, max});
+	  for (const shiftKey of [false, true]) {
+	    reset();
+	    const bottom = key('G', {shiftKey});
+	    record('G reaches the bottom with shiftKey=' + shiftKey, near(bottom.y, max) && bottom.prevented, bottom);
+	  }
+	  reset();
+	  const first = key('g');
+	  const second = key('g');
+	  record('single g waits and gg reaches the top', first.y === middle && second.y === 0 && second.prevented, {first, second});
+	  reset();
+	  key('g');
+	  const repeats = [key('g', {repeat:true}), key('g', {repeat:true})];
+	  record('holding g does not complete gg', repeats.every(x => x.y === middle), repeats);
+	  const resets = [
+	    ['unrelated key', () => key('x')],
+	    ['modified key', () => key('g', {metaKey:true})],
+	    ['window blur', () => window.dispatchEvent(new Event('blur'))],
+	    ['pointerdown', () => document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true}))],
+	    ['focus change', () => {
+	      const button = document.createElement('button');
+	      document.body.append(button);
+	      button.focus({preventScroll:true});
+	      button.blur();
+	      button.remove();
+	    }],
+	    ['composition', () => key('g', {isComposing:true})],
+	    ['already-handled event', () => key('g', {}, document.body, true)]
+	  ];
+	  for (const [name, interrupt] of resets) {
+	    reset();
+	    key('g');
+	    interrupt();
+	    const after = key('g');
+	    record('gg prefix resets after ' + name, after.y === middle, after);
+	  }
+	  const shortcuts = [];
+	  for (const modifier of ['metaKey', 'altKey', 'ctrlKey', 'shiftKey']) {
+	    for (const name of ['g', 'G', 'u', 'd']) {
+	      if (modifier === 'ctrlKey' && (name === 'u' || name === 'd')) continue;
+	      if (modifier === 'shiftKey' && name === 'G') continue;
+	      reset();
+	      const event = key(name, {[modifier]:true});
+	      shortcuts.push({name, modifier, ...event});
+	    }
+	  }
+	  for (const modifier of ['metaKey', 'altKey', 'shiftKey']) {
+	    for (const name of ['u', 'd']) {
+	      reset();
+	      shortcuts.push({name, modifier, ...key(name, {ctrlKey:true, [modifier]:true})});
+	    }
+	  }
+	  record('modified shortcuts remain unhandled', shortcuts.every(x => x.y === middle && !x.prevented), shortcuts);
+	  const ignored = [];
+	  for (const [name, options] of [['u', {ctrlKey:true}], ['d', {ctrlKey:true}], ['G', {}], ['g', {}]]) {
+	    reset();
+	    const composing = key(name, {...options, isComposing:true});
+	    const handled = key(name, options, document.body, true);
+	    ignored.push({name, composing, handled});
+	  }
+	  record('composition and already-handled keys do not navigate', ignored.every(x => x.composing.y === middle && !x.composing.prevented && x.handled.y === middle), ignored);
+	  const editors = [];
+	  for (const tag of ['input', 'textarea', 'select', 'div']) {
+	    reset();
+	    const editor = document.createElement(tag);
+	    if (tag === 'div') editor.contentEditable = 'true';
+	    const target = tag === 'div' ? editor.appendChild(document.createElement('span')) : editor;
+	    document.body.append(editor);
+	    editor.focus({preventScroll:true});
+	    window.scrollTo(0, middle);
+	    const events = [key('u', {ctrlKey:true}, target), key('d', {ctrlKey:true}, target), key('G', {}, target), key('g', {}, target), key('g', {}, target)];
+	    editors.push({tag, events});
+	    editor.remove();
+	  }
+	  record('editable controls and contenteditable descendants retain their keys', editors.every(x => x.events.every(e => e.y === middle && !e.prevented)), editors);
+	  for (const selector of ['pre', '.table-scroll']) {
+	    reset();
+	    const region = document.querySelector(selector);
+	    region.focus({preventScroll:true});
+	    region.scrollLeft = 100;
+	    const beforeX = region.scrollLeft;
+	    const event = key('d', {ctrlKey:true}, region);
+	    record('vim navigation scrolls the document while ' + selector + ' is focused', near(event.y, middle + half) && region.scrollLeft === beforeX, {event, beforeX, afterX:region.scrollLeft});
+	    region.scrollLeft = 0;
+	  }
+	  reset();
+	  window.scrollTo(0, 0);
+	  return results;
+	})()`)
+	results, ok := value.([]any)
+	if !ok {
+		panic(fmt.Sprintf("vim-navigation query returned %#v", value))
+	}
+	for _, entry := range results {
+		result := entry.(map[string]any)
+		s.check(result["name"].(string), result["passed"] == true, result["detail"])
+	}
+}
+
 func (s *suite) run(dir, document, source string, started time.Time, iterations, idleSeconds int, stress, startupOnly, lifecycleOnly bool) {
 	first := s.wait("opened", 0, 0)
 	loaded := s.wait("loaded", first.ID, 0)
@@ -298,6 +428,7 @@ func (s *suite) run(dir, document, source string, started time.Time, iterations,
 		s.check(selector+" permits horizontal scrolling and focus", geometryMap["found"] == true && geometryMap["focused"] == true && after > 0, geometry)
 		s.checkControls(id, selector)
 	}
+	s.checkVimNavigation(id)
 	s.app.Open(filepath.Join(filepath.Dir(document), ".", filepath.Base(document)))
 	s.evaluate(id, `true`)
 	duplicate := false
