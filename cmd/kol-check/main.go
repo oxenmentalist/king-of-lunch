@@ -343,6 +343,55 @@ func (s *suite) checkVimNavigation(id uint64) {
 	}
 }
 
+func (s *suite) checkSearch(id uint64) {
+	value := s.evaluate(id, `(() => {
+	  const results = [];
+	  const record = (name, passed) => results.push({name, passed});
+	  const key = (key, options = {}, target = document.activeElement) => {
+	    const event = new KeyboardEvent('keydown', {key, bubbles:true, cancelable:true, ...options});
+	    target.dispatchEvent(event);
+	    return event.defaultPrevented;
+	  };
+	  const fixture = document.createElement('section');
+	  fixture.innerHTML = '<p>kolneedle <strong>across</strong> markup</p><p>KOLNEEDLE across markup</p>';
+	  document.querySelector('main').prepend(fixture);
+	  getSelection().removeAllRanges();
+	  document.activeElement.blur();
+	  key(':'); key('x'); key('/');
+	  record('search prefix resets after unrelated keys', !document.querySelector('.document-search'));
+	  key(':'); key('/');
+	  const input = document.querySelector('.document-search input');
+	  const bar = input.closest('.document-search');
+	  record('colon slash opens and focuses search', !bar.hidden && document.activeElement === input);
+	  record('typing n in search keeps native input handling', !key('n'));
+	  input.value = 'kolneedle across markup';
+	  key('Enter');
+	  const first = getSelection().anchorNode;
+	  record('search selects text across inline markup and closes input', bar.hidden && getSelection().toString() === 'kolneedle across markup');
+	  key('n');
+	  const second = getSelection().anchorNode;
+	  record('n advances case-insensitively', second !== first && getSelection().toString() === 'KOLNEEDLE across markup');
+	  key('n');
+	  record('forward search wraps', getSelection().anchorNode === first);
+	  key('N', {shiftKey:true});
+	  record('N searches backward and wraps', getSelection().anchorNode === second);
+	  key(':'); key('/'); input.value = 'missing-kol-search-phrase'; key('Enter');
+	  record('missing query shows feedback and stays editable', !bar.hidden && document.activeElement === input && bar.textContent.includes('No matches'));
+	  key('Escape');
+	  record('Escape closes search and restores document focus', bar.hidden && document.activeElement !== input);
+	  key(':'); key('/'); input.value = ''; key('Enter');
+	  record('empty query clears search', bar.hidden && !key('n'));
+	  fixture.remove();
+	  getSelection().removeAllRanges();
+	  window.scrollTo(0, 0);
+	  return results;
+	})()`)
+	for _, entry := range value.([]any) {
+		result := entry.(map[string]any)
+		s.check(result["name"].(string), result["passed"] == true, nil)
+	}
+}
+
 func (s *suite) run(dir, document, source string, started time.Time, iterations, idleSeconds int, stress, startupOnly, lifecycleOnly bool) {
 	first := s.wait("opened", 0, 0)
 	loaded := s.wait("loaded", first.ID, 0)
@@ -429,6 +478,7 @@ func (s *suite) run(dir, document, source string, started time.Time, iterations,
 		s.checkControls(id, selector)
 	}
 	s.checkVimNavigation(id)
+	s.checkSearch(id)
 	s.app.Open(filepath.Join(filepath.Dir(document), ".", filepath.Base(document)))
 	s.evaluate(id, `true`)
 	duplicate := false

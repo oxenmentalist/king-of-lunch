@@ -3,7 +3,73 @@
 // navigation and predictable horizontal overflow controls.
 (() => {
   let pendingG = false;
-  const resetSequence = () => { pendingG = false; };
+  let pendingColon = false;
+  const resetSequence = () => { pendingG = false; pendingColon = false; };
+  let query = '';
+  let searchBar;
+  let searchInput;
+  let searchStatus;
+  let savedSelection;
+
+  function closeSearch() {
+    searchInput.blur();
+    searchBar.hidden = true;
+    const selection = getSelection();
+    selection.removeAllRanges();
+    if (savedSelection) selection.addRange(savedSelection);
+  }
+
+  function findMatch(backward = false) {
+    if (!query) return;
+    // WebKit searches rendered text across inline markup, selects the result,
+    // and scrolls both the document and overflowing code/table containers.
+    const found = window.find(query, false, backward, true, false, false, false);
+    if (!found) {
+      openSearch();
+      searchStatus.textContent = 'No matches';
+    }
+  }
+
+  function openSearch() {
+    if (!searchBar) {
+      searchBar = document.createElement('div');
+      searchBar.className = 'document-search';
+      searchBar.setAttribute('role', 'search');
+      const label = document.createElement('label');
+      label.textContent = ':/';
+      searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.setAttribute('aria-label', 'Search document');
+      searchInput.placeholder = 'Search';
+      searchInput.autocomplete = 'off';
+      searchInput.spellcheck = false;
+      label.append(searchInput);
+      searchStatus = document.createElement('span');
+      searchStatus.setAttribute('role', 'status');
+      searchBar.append(label, searchStatus);
+      document.body.append(searchBar);
+      searchInput.addEventListener('input', () => { searchStatus.textContent = ''; });
+      searchInput.addEventListener('keydown', event => {
+        if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeSearch();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          query = searchInput.value;
+          closeSearch();
+          findMatch(event.shiftKey);
+        }
+      });
+    }
+    const selection = getSelection();
+    savedSelection = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    searchBar.hidden = false;
+    searchInput.value = query;
+    searchStatus.textContent = 'Enter to find · Esc to close';
+    searchInput.focus({ preventScroll: true });
+    searchInput.select();
+  }
 
   document.addEventListener('focusin', resetSequence);
   document.addEventListener('pointerdown', resetSequence);
@@ -19,11 +85,18 @@
     }
 
     const secondG = pendingG;
+    const afterColon = pendingColon;
     resetSequence();
     const page = document.scrollingElement;
     if (!page) return;
 
-    if (event.ctrlKey && !event.shiftKey && (event.key === 'u' || event.key === 'd')) {
+    if (!event.ctrlKey && event.key === ':' && !event.repeat) {
+      pendingColon = true;
+    } else if (!event.ctrlKey && event.key === '/' && afterColon) {
+      openSearch();
+    } else if (!event.ctrlKey && (event.key === 'n' || event.key === 'N') && query) {
+      findMatch(event.key === 'N');
+    } else if (event.ctrlKey && !event.shiftKey && (event.key === 'u' || event.key === 'd')) {
       page.scrollTop += (event.key === 'd' ? 1 : -1) * document.documentElement.clientHeight / 2;
     } else if (!event.ctrlKey && event.key === 'G') {
       page.scrollTop = page.scrollHeight;

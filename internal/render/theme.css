@@ -76,8 +76,35 @@ td + td, th + th { border-left: 1px solid #363646; }
 img { max-width: 100%; height: auto; vertical-align: middle; }
 .missing-image { color: var(--muted); font-style: italic; }
 .blocked-link { color: inherit; }
+.document-search {
+  position: fixed;
+  bottom: 0;
+  inset-inline: 0;
+  padding: .6rem 1rem;
+  background: var(--code-background);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: .88rem;
+}
+.document-search[hidden] { display: none; }
+.document-search label { display: flex; align-items: center; gap: .6rem; flex: 1; min-width: 0; }
+.document-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: .25rem;
+  background: transparent;
+  color: var(--foreground);
+  caret-color: var(--foreground);
+  font: inherit;
+}
+.document-search input::placeholder, .document-search [role="status"] { color: var(--muted); }
+.document-search [role="status"] { flex-shrink: 0; }
 @media (max-width: 560px) { main { padding: 1.5rem 1.25rem 3rem; } }
 @media print {
+  .document-search { display: none; }
   html, body { background: white; color: black; }
   main { max-width: none; padding: 0; }
   pre, .table-scroll { overflow: visible; }
