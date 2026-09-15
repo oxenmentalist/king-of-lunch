@@ -9,7 +9,7 @@ kol README.md
 kol "notes/lunch plans.md"
 ```
 
-KING OF LUNCH opens a native Mac window with a clean rendering in the **Kanagawa Wave** dark palette. It renders headings, lists, links, local images, tables, and syntax-colored code blocks. Long documents scroll vertically; wide tables and code blocks have their own horizontal scrolling regions. Text is selectable and copyable.
+KING OF LUNCH opens a native Mac window with a clean rendering in the **Kanagawa Wave** dark or **Kanagawa Lotus** light palette. By default, it follows the macOS appearance. It renders headings, lists, links, local images, tables, and syntax-colored code blocks. Long documents scroll vertically; wide tables and code blocks have their own horizontal scrolling regions. Text is selectable and copyable.
 
 This is a personal, read-only tool: no editing, file watching, account, background service, or configuration window. Reload is deliberate.
 
@@ -42,6 +42,12 @@ make install APP_DIR="$HOME/Applications" BIN_DIR="$HOME/bin"
 ```
 
 Use `make install` again to update. Quit the running app before replacing it. To uninstall, remove the app, the launcher, and its `kol.app-path` file from the destinations you selected.
+
+## Theme
+
+Choose **View → Theme → System, Light, or Dark**. System follows the macOS light/dark appearance, including changes while the app is open. Light and Dark keep the selected appearance regardless of the OS setting.
+
+The choice applies immediately to all open windows and is saved across launches. Switching themes preserves your scroll position, font size, text selection, and document search.
 
 ## Controls
 

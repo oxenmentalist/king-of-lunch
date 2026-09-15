@@ -409,17 +409,129 @@ func (s *suite) checkSearch(id uint64) {
 // Printing saves through the same WKWebView print operation as File > Print,
 // without the panel. Paper styling itself is reviewed from the generated PDF.
 func (s *suite) checkPrint(id uint64, dir string) {
+	defer func() {
+		native.Action(id, "themeRestore")
+		s.wait("theme-changed", 0, 0)
+	}()
+	for _, theme := range []string{"Light", "Dark"} {
+		native.Action(id, "theme"+theme)
+		s.wait("theme-changed", 0, 0)
+		s.eventually(id, fmt.Sprintf(`matchMedia('(prefers-color-scheme: dark)').matches === %t`, theme == "Dark"))
+		background := s.evaluate(id, `getComputedStyle(document.documentElement).backgroundColor`)
+		native.Action(id, "zoomIn")
+		s.eventually(id, fontSize+` === 18`)
+		path := filepath.Join(dir, "print-"+strings.ToLower(theme)+".pdf")
+		native.PrintPDF(id, path)
+		printed := s.wait("printed", id, 0)
+		pdf, err := os.ReadFile(path)
+		pages := len(regexp.MustCompile(`/Type\s*/Page\b`).FindAll(pdf, -1))
+		s.check(theme+" theme print operation saves a multi-page PDF", printed.Value == "true" && err == nil && strings.HasPrefix(string(pdf), "%PDF-") && pages > 1, map[string]any{"value": printed.Value, "bytes": len(pdf), "pages": pages})
+		s.check(theme+" theme printing leaves the on-screen document unchanged", s.number(id, fontSize) == 18 && s.evaluate(id, `getComputedStyle(document.documentElement).backgroundColor`) == background, nil)
+		native.Action(id, "zoomReset")
+		s.eventually(id, fontSize+` === 16`)
+	}
+}
+
+// checkThemes uses the real View menu actions and inherited window appearance.
+// The system appearance proxy changes only diagnostic windows, never OS settings.
+func (s *suite) checkThemes(id uint64, dir, source string) {
+	state := func(action string) map[string]any {
+		native.Action(id, action)
+		e := s.wait("theme-changed", 0, 0)
+		var value map[string]any
+		if err := json.Unmarshal([]byte(e.Value), &value); err != nil {
+			panic(fmt.Sprintf("invalid theme state %q: %v", e.Value, err))
+		}
+		return value
+	}
+	initial := state("themeState")
+	pref, _ := initial["preference"].(string)
+	s.check("theme starts with a valid preference", pref == "system" || pref == "light" || pref == "dark", initial)
+	defer func() { state("themeRestore") }()
+	choose := func(preference string) {
+		value := state("theme" + strings.ToUpper(preference[:1]) + preference[1:])
+		checked, _ := value["checked"].([]any)
+		s.check("theme "+preference+" persists and exclusively checks its menu item", value["preference"] == preference && value["saved"] == preference && value["override"] == preference && len(checked) == 1 && checked[0] == preference, value)
+	}
+	palette := func(documentID uint64) map[string]any {
+		return s.evaluate(documentID, `(() => {
+		  const body = getComputedStyle(document.body);
+		  const code = document.querySelector('pre code') || document.querySelector('pre');
+		  const colors = code ? Array.from(code.querySelectorAll('span')).map(x => getComputedStyle(x).color) : [];
+		  return {background:getComputedStyle(document.documentElement).backgroundColor, foreground:body.color, dark:matchMedia('(prefers-color-scheme: dark)').matches, syntax:[...new Set(colors)].sort()};
+		})()`).(map[string]any)
+	}
+	matches := func(documentID uint64, dark bool) bool {
+		return s.eventually(documentID, fmt.Sprintf(`matchMedia('(prefers-color-scheme: dark)').matches === %t`, dark))
+	}
+	path := filepath.Join(dir, "theme-existing.md")
+	write(path, source)
+	second := s.open(path)
+	defer s.close(second)
+	choose("light")
+	s.check("light theme reaches every existing window", matches(id, false) && matches(second, false), nil)
+	light := palette(id)
+	colors, _ := light["syntax"].([]any)
+	s.check("light theme uses its readable document palette and syntax highlighting", light["background"] == "rgb(242, 236, 188)" && light["foreground"] == "rgb(84, 84, 100)" && len(colors) >= 3, light)
+
+	// Keep a real submitted search, DOM selection, nonzero scroll and window zoom.
 	native.Action(id, "zoomIn")
 	s.eventually(id, fontSize+` === 18`)
-	path := filepath.Join(dir, "print.pdf")
-	native.PrintPDF(id, path)
-	printed := s.wait("printed", id, 0)
-	pdf, err := os.ReadFile(path)
-	pages := len(regexp.MustCompile(`/Type\s*/Page\b`).FindAll(pdf, -1))
-	s.check("print operation saves a multi-page PDF", printed.Value == "true" && err == nil && strings.HasPrefix(string(pdf), "%PDF-") && pages > 1, map[string]any{"value": printed.Value, "bytes": len(pdf), "pages": pages})
-	s.check("printing leaves the on-screen document unchanged", s.number(id, fontSize) == 18 && s.evaluate(id, `getComputedStyle(document.documentElement).backgroundColor`) == "rgb(31, 31, 40)", nil)
+	s.evaluate(id, `(() => {
+	  const key = key => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key, bubbles:true, cancelable:true}));
+	  document.activeElement.blur(); key(':'); key('/');
+	  const input = document.querySelector('.document-search input');
+	  input.value = 'Paragraph'; key('Enter');
+	  window.scrollTo(0, 550);
+	  window.__themeCheck = {selection:getSelection().toString(), node:getSelection().anchorNode, input, y:scrollY};
+	  return true;
+	})()`)
+	choose("dark")
+	s.check("dark theme reaches every existing window", matches(id, true) && matches(second, true), nil)
+	dark := palette(id)
+	colors, _ = dark["syntax"].([]any)
+	s.check("dark theme uses its readable document palette", dark["background"] == "rgb(31, 31, 40)" && dark["foreground"] == "rgb(220, 215, 186)", dark)
+	s.check("dark theme changes background, foreground and syntax palette", dark["background"] != light["background"] && dark["foreground"] != light["foreground"] && fmt.Sprint(dark["syntax"]) != fmt.Sprint(light["syntax"]) && len(colors) >= 3, map[string]any{"light": light, "dark": dark})
+	s.check("theme changes retain search, selection, scroll and zoom", s.evaluate(id, `(() => {
+	  const before = window.__themeCheck;
+	  return before.selection === 'Paragraph' && getSelection().toString() === before.selection && getSelection().anchorNode === before.node && document.querySelector('.document-search input') === before.input && before.input.value === 'Paragraph' && Math.abs(scrollY - before.y) <= 1 && parseFloat(getComputedStyle(document.body).fontSize) === 18;
+	})()`) == true, nil)
+	s.check("repeat search still works after changing theme", s.evaluate(id, `(() => {
+	  document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key:'n', bubbles:true, cancelable:true}));
+	  return getSelection().toString().toLowerCase() === 'paragraph' && getSelection().anchorNode !== window.__themeCheck.node;
+	})()`) == true, nil)
+	newPath := filepath.Join(dir, "theme-new.md")
+	write(newPath, source)
+	third := s.open(newPath)
+	s.check("new windows inherit chosen dark theme", matches(third, true) && palette(third)["background"] == dark["background"], nil)
+	s.close(third)
+	native.Action(id, "reload")
+	s.wait("loaded", id, 0)
+	s.check("reload retains chosen dark theme and zoom", matches(id, true) && palette(id)["background"] == dark["background"] && s.number(id, fontSize) == 18, nil)
+	choose("system")
+	for _, environment := range []string{"Light", "Dark", "Light"} {
+		native.Action(id, "system"+environment)
+		s.wait("theme-environment", 0, 0)
+		isDark := environment == "Dark"
+		expected := light
+		if isDark {
+			expected = dark
+		}
+		s.check("system theme follows inherited "+strings.ToLower(environment)+" appearance", matches(id, isDark) && palette(id)["background"] == expected["background"] && palette(id)["foreground"] == expected["foreground"], palette(id))
+		value := state("themeState")
+		s.check("system appearance changes retain system preference and no app override", value["preference"] == "system" && value["saved"] == "system" && value["override"] == "system", value)
+	}
+	choose("dark")
+	native.Action(id, "systemLight")
+	s.wait("theme-environment", 0, 0)
+	s.check("explicit dark theme ignores inherited light appearance", matches(id, true) && palette(id)["background"] == dark["background"], nil)
+	choose("light")
+	native.Action(id, "systemDark")
+	s.wait("theme-environment", 0, 0)
+	s.check("explicit light theme ignores inherited dark appearance", matches(id, false) && palette(id)["background"] == light["background"], nil)
 	native.Action(id, "zoomReset")
 	s.eventually(id, fontSize+` === 16`)
+	s.evaluate(id, `getSelection().removeAllRanges(); window.scrollTo(0,0); true`)
 }
 
 func (s *suite) run(dir, document, source string, started time.Time, iterations, idleSeconds int, stress, startupOnly, lifecycleOnly bool) {
@@ -510,6 +622,7 @@ func (s *suite) run(dir, document, source string, started time.Time, iterations,
 	s.checkVimNavigation(id)
 	s.checkSearch(id)
 	s.checkPrint(id, dir)
+	s.checkThemes(id, dir, source)
 	s.app.Open(filepath.Join(filepath.Dir(document), ".", filepath.Base(document)))
 	s.evaluate(id, `true`)
 	duplicate := false
