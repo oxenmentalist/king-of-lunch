@@ -154,6 +154,15 @@ func TestLinkResolution(t *testing.T) {
 	}
 }
 
+func TestPrintStyling(t *testing.T) {
+	got := mustRender(t, "[Go](https://go.dev/) and https://example.com/\n\n```go\nfunc main() {}\n```\n", "/tmp/print.md")
+	for _, want := range []string{`<a href="https://go.dev/">Go</a>`, `<a class="autolink" href="https://example.com/">https://example.com/</a>`, "@media print {\n", "#624c83"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in rendered document", want)
+		}
+	}
+}
+
 func writePNG(t testing.TB, path string) {
 	t.Helper()
 	f, err := os.Create(path)

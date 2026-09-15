@@ -15,6 +15,8 @@ static NSString *json(id object) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:object ?: [NSNull null] options:NSJSONWritingFragmentsAllowed error:nil];
     return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"null";
 }
+// Lazy images below the viewport would otherwise print as empty boxes.
+static NSString *printPreparationScript = @"await Promise.all(Array.from(document.images, image => { image.loading = 'eager'; return image.decode().catch(() => {}); }))";
 static NSString *anchorScript(NSString *fragment) {
     return [NSString stringWithFormat:@"(() => { const id=%@; if (!id) { window.scrollTo(0,0); return; } const target=document.getElementById(id); if (target) target.scrollIntoView(); })()", json(fragment)];
 }
@@ -37,6 +39,7 @@ static NSString *anchorScript(NSString *fragment) {
 - (void)loadHTML:(NSString *)html generation:(uint64_t)generation;
 - (void)applyZoom;
 - (void)navigateToFragment:(NSString *)fragment;
+- (void)printToURL:(NSURL *)destination;
 @end
 
 @interface KOLDelegate : NSObject <NSApplicationDelegate, NSMenuItemValidation>
@@ -47,6 +50,7 @@ static NSString *anchorScript(NSString *fragment) {
 - (void)zoomIn:(id)sender;
 - (void)zoomOut:(id)sender;
 - (void)zoomReset:(id)sender;
+- (void)printDocument:(id)sender;
 @end
 static KOLDelegate *delegate;
 
@@ -68,6 +72,8 @@ static KOLDelegate *delegate;
         config.websiteDataStore = documentDataStore;
         config.defaultWebpagePreferences.allowsContentJavaScript = NO;
         config.preferences.javaScriptCanOpenWindowsAutomatically = NO;
+        // Code blocks and table headings keep their light tint on paper.
+        if (@available(macOS 13.3, *)) config.preferences.shouldPrintBackgrounds = YES;
         WKUserScript *controls = [[WKUserScript alloc] initWithSource:controlScript injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES inContentWorld:world()];
         [config.userContentController addUserScript:controls];
         self.web = [[WKWebView alloc] initWithFrame:window.contentView.bounds configuration:config];
@@ -118,6 +124,42 @@ static KOLDelegate *delegate;
                 load();
             }];
     } else { load(); }
+}
+// destination nil shows the print panel; a file URL saves a PDF without UI.
+- (void)printToURL:(NSURL *)destination {
+    if (self.closed || !self.hasContent || self.window.attachedSheet) {
+        if (destination) emit(@"printed", self.identifier, @"false", 0);
+        return;
+    }
+    [self.web callAsyncJavaScript:printPreparationScript arguments:nil inFrame:nil inContentWorld:world() completionHandler:^(id value, NSError *error) {
+        if (self.closed || self.window.attachedSheet) {
+            if (destination) emit(@"printed", self.identifier, @"false", 0);
+            return;
+        }
+        NSPrintInfo *info = [[NSPrintInfo sharedPrintInfo] copy];
+        info.horizontalPagination = NSPrintingPaginationModeFit;
+        info.verticalPagination = NSPrintingPaginationModeAutomatic;
+        info.horizontallyCentered = NO;
+        info.verticallyCentered = NO;
+        info.leftMargin = info.rightMargin = 54;
+        info.topMargin = info.bottomMargin = 54;
+        info.dictionary[NSPrintHeaderAndFooter] = @YES;
+        if (destination) {
+            info.jobDisposition = NSPrintSaveJob;
+            info.dictionary[NSPrintJobSavingURL] = destination;
+        }
+        NSPrintOperation *operation = [self.web printOperationWithPrintInfo:info];
+        operation.jobTitle = self.path.lastPathComponent.stringByDeletingPathExtension;
+        operation.showsPrintPanel = destination == nil;
+        operation.showsProgressPanel = destination == nil;
+        operation.printPanel.options |= NSPrintPanelShowsPaperSize | NSPrintPanelShowsOrientation | NSPrintPanelShowsScaling;
+        // WKWebView's printing view is laid out from this frame; a zero frame prints blank pages.
+        operation.view.frame = self.web.bounds;
+        [operation runOperationModalForWindow:self.window delegate:self didRunSelector:@selector(printOperationDidRun:success:contextInfo:) contextInfo:destination ? (void *)1 : NULL];
+    }];
+}
+- (void)printOperationDidRun:(NSPrintOperation *)operation success:(BOOL)success contextInfo:(void *)contextInfo {
+    if (contextInfo) emit(@"printed", self.identifier, success ? @"true" : @"false", 0);
 }
 - (void)webView:(WKWebView *)web didFinishNavigation:(WKNavigation *)navigation {
     if (self.closed || navigation != self.navigation || self.navigationGeneration != self.generation) return;
@@ -202,9 +244,11 @@ static KOLDocument *actionDocument(id sender) {
 - (void)zoomIn:(id)sender { KOLDocument *d = actionDocument(sender); if (d) emit(@"zoom", d.identifier, @"2", 0); }
 - (void)zoomOut:(id)sender { KOLDocument *d = actionDocument(sender); if (d) emit(@"zoom", d.identifier, @"-2", 0); }
 - (void)zoomReset:(id)sender { KOLDocument *d = actionDocument(sender); if (d) emit(@"zoom", d.identifier, @"0", 0); }
+- (void)printDocument:(id)sender { [actionDocument(sender) printToURL:nil]; }
 - (BOOL)validateMenuItem:(NSMenuItem *)item {
     KOLDocument *d = focused();
     if (item.action == @selector(reloadDocument:) || item.action == @selector(zoomReset:)) return d != nil;
+    if (item.action == @selector(printDocument:)) return d && d.hasContent && !d.window.attachedSheet;
     if (item.action == @selector(zoomIn:)) return d && d.fontSize < 32;
     if (item.action == @selector(zoomOut:)) return d && d.fontSize > 10;
     return YES;
@@ -238,6 +282,10 @@ void kol_run(const char *controls) {
         NSMenu *file = submenu(bar, @"File");
         item(file, @"Open…", @selector(openDocument:), @"o", delegate);
         item(file, @"Reload", @selector(reloadDocument:), @"r", delegate);
+        [file addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *pageSetup = item(file, @"Page Setup…", @selector(runPageLayout:), @"p", NSApp);
+        pageSetup.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
+        item(file, @"Print…", @selector(printDocument:), @"p", delegate);
         [file addItem:[NSMenuItem separatorItem]];
         item(file, @"Close Window", @selector(performClose:), @"w", nil);
         NSMenu *edit = submenu(bar, @"Edit");
@@ -362,6 +410,15 @@ void kol_action(uint64_t identifier, const char *action) {
         else if ([name isEqualToString:@"zoomReset"]) [delegate zoomReset:d];
         else if ([name isEqualToString:@"close"]) [d.window performClose:nil];
         else if ([name isEqualToString:@"dismissError"] && d.alert) [d.window endSheet:d.alert.window returnCode:NSModalResponseOK];
+    });
+    }
+}
+void kol_print_pdf(uint64_t identifier, const char *path) {
+    @autoreleasepool {
+    NSURL *destination = [NSURL fileURLWithPath:copied(path)];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        KOLDocument *d = delegate.documents[@(identifier)];
+        if (d) [d printToURL:destination]; else emit(@"printed", identifier, @"false", 0);
     });
     }
 }

@@ -36,11 +36,42 @@ var kanagawa = chroma.MustNewStyle("king-of-lunch-kanagawa", chroma.StyleEntries
 	chroma.GenericEmph:         "italic",
 })
 
+// Paper uses Kanagawa Lotus, the light variant, so tokens stay legible in ink.
+var kanagawaLotus = chroma.MustNewStyle("king-of-lunch-kanagawa-lotus", chroma.StyleEntries{
+	chroma.Background:          "#1F1F28 bg:#F5F3EA",
+	chroma.Text:                "#1F1F28",
+	chroma.Error:               "#C84053",
+	chroma.Comment:             "#716E61 italic",
+	chroma.CommentPreproc:      "#836F4A",
+	chroma.Keyword:             "#624C83",
+	chroma.KeywordType:         "#597B75",
+	chroma.Operator:            "#836F4A",
+	chroma.Punctuation:         "#545464",
+	chroma.NameBuiltin:         "#4D699B",
+	chroma.NameClass:           "#597B75",
+	chroma.NameFunction:        "#4D699B",
+	chroma.NameTag:             "#4D699B",
+	chroma.NameAttribute:       "#77713F",
+	chroma.NameDecorator:       "#597B75",
+	chroma.NameConstant:        "#CC6D00",
+	chroma.LiteralString:       "#6F894E",
+	chroma.LiteralStringEscape: "#4E8CA2",
+	chroma.LiteralNumber:       "#B35B79",
+	chroma.GenericDeleted:      "#C84053",
+	chroma.GenericInserted:     "#6F894E",
+	chroma.GenericHeading:      "#4D699B bold",
+	chroma.GenericStrong:       "bold",
+	chroma.GenericEmph:         "italic",
+})
+
 var formatter = chromahtml.New(chromahtml.WithClasses(true), chromahtml.PreventSurroundingPre(true), chromahtml.WithCSSComments(false))
 
 var highlightCSS = func() string {
 	var out bytes.Buffer
 	_ = formatter.WriteCSS(&out, kanagawa)
+	out.WriteString("@media print {\n")
+	_ = formatter.WriteCSS(&out, kanagawaLotus)
+	out.WriteString("}\n")
 	return out.String()
 }()
 
