@@ -19,6 +19,14 @@
     if (savedSelection) selection.addRange(savedSelection);
   }
 
+  function clearSearch() {
+    query = '';
+    searchInput.value = '';
+    searchStatus.textContent = '';
+    savedSelection = null;
+    closeSearch();
+  }
+
   function findMatch(backward = false) {
     if (!query) return;
     // WebKit searches rendered text across inline markup, selects the result,
@@ -53,7 +61,7 @@
         if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key === 'Escape') {
           event.preventDefault();
-          closeSearch();
+          clearSearch();
         } else if (event.key === 'Enter') {
           event.preventDefault();
           query = searchInput.value;
@@ -66,7 +74,7 @@
     savedSelection = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
     searchBar.hidden = false;
     searchInput.value = query;
-    searchStatus.textContent = 'Enter to find · Esc to close';
+    searchStatus.textContent = 'Enter to find · Esc to clear';
     searchInput.focus({ preventScroll: true });
     searchInput.select();
   }
@@ -94,6 +102,9 @@
       pendingColon = true;
     } else if (!event.ctrlKey && event.key === '/' && afterColon) {
       openSearch();
+    } else if (!event.ctrlKey && event.key === 'Escape' &&
+        (query || (searchBar && !searchBar.hidden))) {
+      clearSearch();
     } else if (!event.ctrlKey && (event.key === 'n' || event.key === 'N') && query) {
       findMatch(event.key === 'N');
     } else if (event.ctrlKey && !event.shiftKey && (event.key === 'u' || event.key === 'd')) {

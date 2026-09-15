@@ -60,9 +60,9 @@ Use `make install` again to update. Quit the running app before replacing it. To
 | :/ | Open document search (type `:` then `/`) |
 | Enter / Shift-Enter | Find forward / backward and close search |
 | n / N (Shift-N) | Find next / previous match |
-| Esc | Close search |
+| Esc | Clear the search term and selection, and close search |
 
-Search is literal, case-insensitive, and wraps at either end of the document. Matches are selected and scrolled into view. Each window remembers its search until reloaded or closed.
+Search is literal, case-insensitive, and wraps at either end of the document. Matches are selected and scrolled into view. Each window remembers its search until cleared with Esc, reloaded, or closed. Esc also clears search while the search bar is closed.
 
 Font size ranges from 10–32 px in 2 px steps, starting at 16 px. Each window keeps its own zoom until closed. Reload preserves zoom and the nearest available scroll position. If the file cannot be read, the previous successful rendering stays visible and an error explains what happened.
 
