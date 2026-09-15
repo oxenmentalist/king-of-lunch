@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -405,6 +406,22 @@ func (s *suite) checkSearch(id uint64) {
 	}
 }
 
+// Printing saves through the same WKWebView print operation as File > Print,
+// without the panel. Paper styling itself is reviewed from the generated PDF.
+func (s *suite) checkPrint(id uint64, dir string) {
+	native.Action(id, "zoomIn")
+	s.eventually(id, fontSize+` === 18`)
+	path := filepath.Join(dir, "print.pdf")
+	native.PrintPDF(id, path)
+	printed := s.wait("printed", id, 0)
+	pdf, err := os.ReadFile(path)
+	pages := len(regexp.MustCompile(`/Type\s*/Page\b`).FindAll(pdf, -1))
+	s.check("print operation saves a multi-page PDF", printed.Value == "true" && err == nil && strings.HasPrefix(string(pdf), "%PDF-") && pages > 1, map[string]any{"value": printed.Value, "bytes": len(pdf), "pages": pages})
+	s.check("printing leaves the on-screen document unchanged", s.number(id, fontSize) == 18 && s.evaluate(id, `getComputedStyle(document.documentElement).backgroundColor`) == "rgb(31, 31, 40)", nil)
+	native.Action(id, "zoomReset")
+	s.eventually(id, fontSize+` === 16`)
+}
+
 func (s *suite) run(dir, document, source string, started time.Time, iterations, idleSeconds int, stress, startupOnly, lifecycleOnly bool) {
 	first := s.wait("opened", 0, 0)
 	loaded := s.wait("loaded", first.ID, 0)
@@ -492,6 +509,7 @@ func (s *suite) run(dir, document, source string, started time.Time, iterations,
 	}
 	s.checkVimNavigation(id)
 	s.checkSearch(id)
+	s.checkPrint(id, dir)
 	s.app.Open(filepath.Join(filepath.Dir(document), ".", filepath.Base(document)))
 	s.evaluate(id, `true`)
 	duplicate := false

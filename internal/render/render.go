@@ -112,7 +112,7 @@ func (r *documentRenderer) autoLink(w util.BufWriter, source []byte, node ast.No
 	if n.AutoLinkType == ast.AutoLinkEmail {
 		_, _ = w.WriteString(label)
 	} else if target, ok := r.linkTarget(n.URL(source)); ok {
-		_, _ = w.WriteString(`<a href="` + html.EscapeString(target) + `">` + label + `</a>`)
+		_, _ = w.WriteString(`<a class="autolink" href="` + html.EscapeString(target) + `">` + label + `</a>`)
 	} else {
 		_, _ = w.WriteString(label)
 	}

@@ -49,6 +49,8 @@ Use `make install` again to update. Quit the running app before replacing it. To
 | --- | --- |
 | ⌘O | Open a Markdown file |
 | ⌘R | Reload the focused file from disk |
+| ⌘P | Print, or save as PDF from the print panel |
+| ⇧⌘P | Page setup (paper size and orientation) |
 | ⌘+ or ⌘= | Increase font size |
 | ⌘− | Decrease font size |
 | ⌘0 | Reset font size |
@@ -63,6 +65,8 @@ Use `make install` again to update. Quit the running app before replacing it. To
 | Esc | Clear the search term and selection, and close search |
 
 Search is literal, case-insensitive, and wraps at either end of the document. Matches are selected and scrolled into view. Each window remembers its search until cleared with Esc, reloaded, or closed. Esc also clears search while the search bar is closed.
+
+Printing uses a light Kanagawa Lotus layout for paper: dark text on white, highlighted code on a pale tint, wrapped code and tables that fit the page width, table headings repeated on each page, and headings kept with the text that follows. Links print their web address. Pages print at a fixed 10.5 pt regardless of window zoom; use the print panel's Scale option to change it. The filename and page numbers appear in the header and footer unless you turn them off in the print panel.
 
 Font size ranges from 10–32 px in 2 px steps, starting at 16 px. Each window keeps its own zoom until closed. Reload preserves zoom and the nearest available scroll position. If the file cannot be read, the previous successful rendering stays visible and an error explains what happened.
 

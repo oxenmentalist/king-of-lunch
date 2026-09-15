@@ -70,5 +70,11 @@ func Evaluate(id, token uint64, script string) {
 func Action(id uint64, action string) {
 	withString(action, func(p *C.char) { C.kol_action(C.uint64_t(id), p) })
 }
+
+// PrintPDF runs the document's print operation into a PDF file without a
+// panel. A "printed" event reports whether the operation succeeded.
+func PrintPDF(id uint64, path string) {
+	withString(path, func(p *C.char) { C.kol_print_pdf(C.uint64_t(id), p) })
+}
 func Resize(id uint64, width, height int) { C.kol_resize(C.uint64_t(id), C.int(width), C.int(height)) }
 func Stop()                               { C.kol_stop() }

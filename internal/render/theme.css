@@ -104,8 +104,50 @@ img { max-width: 100%; height: auto; vertical-align: middle; }
 .document-search [role="status"] { flex-shrink: 0; }
 @media (max-width: 560px) { main { padding: 1.5rem 1.25rem 3rem; } }
 @media print {
-  .document-search { display: none; }
-  html, body { background: white; color: black; }
+  :root {
+    color-scheme: light;
+    /* Paper ignores on-screen zoom; the print panel offers scaling instead. */
+    font-size: 10.5pt !important;
+    --background: #ffffff;
+    --foreground: #1f1f28;
+    --muted: #545464;
+    --code-background: #f5f3ea;
+    --border: #d5d1c1;
+    --link: #4d699b;
+  }
+  html, body { background: var(--background); }
+  body { line-height: 1.5; }
   main { max-width: none; padding: 0; }
-  pre, .table-scroll { overflow: visible; }
+  .document-search { display: none; }
+  h1, h2, h3, h4, h5, h6 { margin: 1.4em 0 .5em; break-after: avoid; break-inside: avoid; }
+  h1 { padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+  p, li, blockquote, dd { orphans: 3; widows: 3; }
+  blockquote { border-left: 3px solid #597b75; }
+  a { text-decoration: none; }
+  /* A printed link cannot be followed; show where it went. Autolinks already do. */
+  a[href^="http"]:not(.autolink)::after {
+    content: " (" attr(href) ")";
+    color: var(--muted);
+    font-size: .85em;
+    overflow-wrap: anywhere;
+  }
+  pre {
+    border: 1px solid var(--border);
+    overflow: visible;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    break-inside: avoid;
+  }
+  code { border: 1px solid var(--border); padding: .05em .3em; }
+  pre code { border: 0; padding: 0; }
+  .table-scroll { overflow: visible; }
+  table { width: auto; }
+  /* Wrap cells at words; "anywhere" would shrink narrow columns to one letter. */
+  th, td { overflow-wrap: break-word; }
+  thead { display: table-header-group; }
+  tr, img { break-inside: avoid; }
+  th { background: var(--code-background); }
+  td + td, th + th { border-left-color: var(--border); }
+  img { width: auto; max-height: 8in; }
+  hr { border-top-color: var(--border); }
 }

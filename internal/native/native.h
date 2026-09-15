@@ -9,5 +9,6 @@ void kol_zoom(uint64_t identifier, int size);
 char *kol_launch(const char *path, const char *application);
 void kol_evaluate(uint64_t identifier, uint64_t token, const char *script);
 void kol_action(uint64_t identifier, const char *action);
+void kol_print_pdf(uint64_t identifier, const char *path);
 void kol_resize(uint64_t identifier, int width, int height);
 void kol_stop(void);
