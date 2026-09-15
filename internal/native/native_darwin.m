@@ -10,6 +10,40 @@ static NSString *copied(const char *text) { return text ? [NSString stringWithUT
 static NSString *documentBase = @"kol-document://viewer/";
 static WKWebsiteDataStore *documentDataStore;
 static NSString *controlScript;
+static NSString *const themeKey = @"Theme";
+static id initialTheme;
+static NSString *themePreference(void) {
+    id saved = [[NSUserDefaults standardUserDefaults] objectForKey:themeKey];
+    return [@[@"system", @"light", @"dark"] containsObject:saved ?: @""] ? saved : @"system";
+}
+static void applyTheme(void) {
+    NSString *preference = themePreference();
+    NSApp.appearance = [preference isEqualToString:@"light"] ? [NSAppearance appearanceNamed:NSAppearanceNameAqua]
+        : [preference isEqualToString:@"dark"] ? [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua] : nil;
+}
+
+// WebKit and the title bar inherit the application appearance. Refresh the
+// exposed canvas too, including on live OS changes while following System.
+@interface KOLWebView : WKWebView
+- (void)updateCanvas;
+@end
+@implementation KOLWebView
+- (void)updateCanvas {
+    BOOL dark = [[self.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]] isEqualToString:NSAppearanceNameDarkAqua];
+    NSColor *background = dark ? [NSColor colorWithSRGBRed:31.0/255 green:31.0/255 blue:40.0/255 alpha:1]
+        : [NSColor colorWithSRGBRed:242.0/255 green:236.0/255 blue:188.0/255 alpha:1];
+    self.underPageBackgroundColor = background;
+    self.window.backgroundColor = background;
+}
+- (void)viewDidChangeEffectiveAppearance {
+    [super viewDidChangeEffectiveAppearance];
+    [self updateCanvas];
+}
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    [self updateCanvas];
+}
+@end
 static WKContentWorld *world(void) { return [WKContentWorld worldWithName:@"KING OF LUNCH controls"]; }
 static NSString *json(id object) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:object ?: [NSNull null] options:NSJSONWritingFragmentsAllowed error:nil];
@@ -51,6 +85,7 @@ static NSString *anchorScript(NSString *fragment) {
 - (void)zoomOut:(id)sender;
 - (void)zoomReset:(id)sender;
 - (void)printDocument:(id)sender;
+- (void)chooseTheme:(NSMenuItem *)sender;
 @end
 static KOLDelegate *delegate;
 
@@ -66,8 +101,6 @@ static KOLDelegate *delegate;
         window.delegate = self;
         window.releasedWhenClosed = NO;
         window.minSize = NSMakeSize(360, 240);
-        window.backgroundColor = [NSColor colorWithSRGBRed:31.0/255 green:31.0/255 blue:40.0/255 alpha:1];
-        window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
         WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
         config.websiteDataStore = documentDataStore;
         config.defaultWebpagePreferences.allowsContentJavaScript = NO;
@@ -76,11 +109,10 @@ static KOLDelegate *delegate;
         if (@available(macOS 13.3, *)) config.preferences.shouldPrintBackgrounds = YES;
         WKUserScript *controls = [[WKUserScript alloc] initWithSource:controlScript injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES inContentWorld:world()];
         [config.userContentController addUserScript:controls];
-        self.web = [[WKWebView alloc] initWithFrame:window.contentView.bounds configuration:config];
+        self.web = [[KOLWebView alloc] initWithFrame:window.contentView.bounds configuration:config];
         self.web.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
         self.web.navigationDelegate = self;
         self.web.allowsBackForwardNavigationGestures = NO;
-        self.web.underPageBackgroundColor = window.backgroundColor;
         [window.contentView addSubview:self.web];
         [window center];
         [window setFrameAutosaveName:@"DocumentWindow"];
@@ -245,7 +277,17 @@ static KOLDocument *actionDocument(id sender) {
 - (void)zoomOut:(id)sender { KOLDocument *d = actionDocument(sender); if (d) emit(@"zoom", d.identifier, @"-2", 0); }
 - (void)zoomReset:(id)sender { KOLDocument *d = actionDocument(sender); if (d) emit(@"zoom", d.identifier, @"0", 0); }
 - (void)printDocument:(id)sender { [actionDocument(sender) printToURL:nil]; }
+- (void)chooseTheme:(NSMenuItem *)sender {
+    NSString *preference = sender.representedObject;
+    if (![@[@"system", @"light", @"dark"] containsObject:preference ?: @""]) return;
+    [[NSUserDefaults standardUserDefaults] setObject:preference forKey:themeKey];
+    applyTheme();
+}
 - (BOOL)validateMenuItem:(NSMenuItem *)item {
+    if (item.action == @selector(chooseTheme:)) {
+        item.state = [item.representedObject isEqual:themePreference()] ? NSControlStateValueOn : NSControlStateValueOff;
+        return YES;
+    }
     KOLDocument *d = focused();
     if (item.action == @selector(reloadDocument:) || item.action == @selector(zoomReset:)) return d != nil;
     if (item.action == @selector(printDocument:)) return d && d.hasContent && !d.window.attachedSheet;
@@ -266,6 +308,8 @@ void kol_run(const char *controls) {
     @autoreleasepool {
         controlScript = copied(controls);
         [NSApplication sharedApplication];
+        initialTheme = [[NSUserDefaults standardUserDefaults] objectForKey:themeKey];
+        applyTheme();
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         documentDataStore = [WKWebsiteDataStore nonPersistentDataStore];
         delegate = [[KOLDelegate alloc] init]; NSApp.delegate = delegate;
@@ -299,6 +343,13 @@ void kol_run(const char *controls) {
         alternate.hidden = YES; alternate.allowsKeyEquivalentWhenHidden = YES;
         item(view, @"Zoom Out", @selector(zoomOut:), @"-", delegate);
         item(view, @"Actual Size", @selector(zoomReset:), @"0", delegate);
+        [view addItem:[NSMenuItem separatorItem]];
+        NSMenu *theme = submenu(view, @"Theme");
+        for (NSString *choice in @[@"System", @"Light", @"Dark"]) {
+            NSMenuItem *themeItem = item(theme, choice, @selector(chooseTheme:), @"", delegate);
+            themeItem.representedObject = choice.lowercaseString;
+            if ([choice isEqualToString:@"System"]) themeItem.toolTip = @"Follow the macOS light or dark appearance.";
+        }
         NSMenu *window = submenu(bar, @"Window");
         item(window, @"Minimize", @selector(performMiniaturize:), @"m", nil);
         item(window, @"Zoom", @selector(performZoom:), @"", nil);
@@ -398,13 +449,46 @@ void kol_evaluate(uint64_t identifier, uint64_t token, const char *script) {
     });
     }
 }
+static void emitThemeState(uint64_t identifier) {
+    NSMenu *theme = [[[NSApp.mainMenu itemWithTitle:@"View"] submenu] itemWithTitle:@"Theme"].submenu;
+    [theme update];
+    NSMutableArray *checked = [NSMutableArray array];
+    for (NSMenuItem *choice in theme.itemArray) if (choice.state == NSControlStateValueOn) [checked addObject:choice.representedObject];
+    NSString *override = NSApp.appearance == nil ? @"system" : [NSApp.appearance.name isEqualToString:NSAppearanceNameDarkAqua] ? @"dark" : @"light";
+    emit(@"theme-changed", identifier, json(@{@"preference":themePreference(), @"saved":[[NSUserDefaults standardUserDefaults] objectForKey:themeKey] ?: @"system", @"override":override, @"checked":checked}), 0);
+}
 void kol_action(uint64_t identifier, const char *action) {
     @autoreleasepool {
     NSString *name = copied(action);
     dispatch_async(dispatch_get_main_queue(), ^{
         KOLDocument *d = delegate.documents[@(identifier)]; if (!d) return;
         [d.window makeKeyAndOrderFront:nil];
-        if ([name isEqualToString:@"reload"]) [delegate reloadDocument:d];
+        if ([name hasPrefix:@"theme"]) {
+            if (![name isEqualToString:@"themeState"]) {
+                for (KOLDocument *document in delegate.documents.allValues) document.window.appearance = nil;
+            }
+            if ([name isEqualToString:@"themeRestore"]) {
+                if (initialTheme) [[NSUserDefaults standardUserDefaults] setObject:initialTheme forKey:themeKey];
+                else [[NSUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
+                applyTheme();
+            } else {
+                NSMenu *theme = [[[NSApp.mainMenu itemWithTitle:@"View"] submenu] itemWithTitle:@"Theme"].submenu;
+                for (NSMenuItem *choice in theme.itemArray) {
+                    if ([name isEqualToString:[@"theme" stringByAppendingString:choice.title]]) [delegate chooseTheme:choice];
+                }
+            }
+            emitThemeState(identifier);
+        }
+        else if ([name isEqualToString:@"systemLight"] || [name isEqualToString:@"systemDark"]) {
+            // Diagnostic proxy for inherited OS appearance; never changes the OS.
+            if ([themePreference() isEqualToString:@"system"]) {
+                for (KOLDocument *document in delegate.documents.allValues) {
+                    document.window.appearance = [NSAppearance appearanceNamed:[name isEqualToString:@"systemDark"] ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
+                }
+            }
+            emit(@"theme-environment", identifier, @"", 0);
+        }
+        else if ([name isEqualToString:@"reload"]) [delegate reloadDocument:d];
         else if ([name isEqualToString:@"zoomIn"]) [delegate zoomIn:d];
         else if ([name isEqualToString:@"zoomOut"]) [delegate zoomOut:d];
         else if ([name isEqualToString:@"zoomReset"]) [delegate zoomReset:d];

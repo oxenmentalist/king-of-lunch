@@ -51,7 +51,7 @@ func Render(source []byte, path string) (string, error) {
 	out.Grow(len(source) + len(themeCSS) + len(highlightCSS) + 1024)
 	out.WriteString("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"Content-Security-Policy\" content=\"")
 	out.WriteString(contentPolicy)
-	out.WriteString("\"><meta name=\"color-scheme\" content=\"dark\"><title>")
+	out.WriteString("\"><meta name=\"color-scheme\" content=\"light dark\"><title>")
 	out.WriteString(html.EscapeString(filepath.Base(abs)))
 	out.WriteString("</title><style>")
 	out.WriteString(highlightCSS)

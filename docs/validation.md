@@ -2,6 +2,16 @@
 
 This report records measured behavior for KING OF LUNCH. The final independent native suite passed **47 checks**, including installed horizontal input handlers, Unicode cross-document anchors, actual WKWebView navigation, and 1 MiB/10 MiB stress documents. Every closed test window was followed through native controller deallocation; a separate lifetime run also confirmed seven such releases. The scope of desktop interaction checks is stated explicitly below.
 
+## Theme settings validation (2026-09-15)
+
+The theme update passed **105 native assertions**, including 23 theme assertions, five repeated opens/closes, and the 1 MiB/10 MiB stress fixtures. It also passed Go race tests, `go vet`, the signed app build, and renderer tests for complete light syntax overrides and a minimum 4.5:1 contrast ratio for light code tokens.
+
+The native suite exercises the actual View → Theme actions, verifies exclusive menu checkmarks and saved preferences, and checks the computed document and syntax colors in existing and newly opened WebKit windows. Switching themes preserves submitted search, DOM selection, scroll, and font zoom; reload retains appearance. System mode leaves the application appearance unset. Diagnostic window appearance changes exercise live light/dark inheritance without changing the user's OS setting; actual OS schedule changes were not tested.
+
+A desktop pass inspected the light and dark reading surfaces and native title bars, selected Dark through the menu, quit and relaunched the built app, and confirmed that Dark persisted. The app was then returned to System. Testing remains limited to the macOS/Apple silicon environment below.
+
+After integration with printing PR #1, `make test` and `make check` passed all **109 native assertions**. Printing from explicit light and dark themes produced 52-page PDFs while retaining each on-screen palette and zoom. Renderer coverage verifies that paper syntax rules override both screen palettes.
+
 ## Environment
 
 - macOS 26.6.2 (25G83), Apple M3 Pro (`arm64`), 36 GiB RAM.

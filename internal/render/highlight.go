@@ -36,8 +36,39 @@ var kanagawa = chroma.MustNewStyle("king-of-lunch-kanagawa", chroma.StyleEntries
 	chroma.GenericEmph:         "italic",
 })
 
-// Paper uses Kanagawa Lotus, the light variant, so tokens stay legible in ink.
+// Lotus uses the same token categories as Wave so changing appearance never
+// leaves a highlighted token with a color from the other palette.
 var kanagawaLotus = chroma.MustNewStyle("king-of-lunch-kanagawa-lotus", chroma.StyleEntries{
+	chroma.Background:          "#545464 bg:#E7DBA0",
+	chroma.Text:                "#545464",
+	chroma.LineNumbers:         "#625E4C",
+	chroma.LineNumbersTable:    "#625E4C",
+	chroma.Error:               "#A5343C",
+	chroma.Comment:             "#625E4C italic",
+	chroma.CommentPreproc:      "#6F5935",
+	chroma.Keyword:             "#624C83",
+	chroma.KeywordType:         "#49624E",
+	chroma.Operator:            "#6F5935",
+	chroma.Punctuation:         "#555465",
+	chroma.NameBuiltin:         "#34548A",
+	chroma.NameClass:           "#49624E",
+	chroma.NameFunction:        "#34548A",
+	chroma.NameTag:             "#34548A",
+	chroma.NameAttribute:       "#6F5935",
+	chroma.NameDecorator:       "#49624E",
+	chroma.NameConstant:        "#8E4B32",
+	chroma.LiteralString:       "#4F613A",
+	chroma.LiteralStringEscape: "#2D626B",
+	chroma.LiteralNumber:       "#864D70",
+	chroma.GenericDeleted:      "#A5343C",
+	chroma.GenericInserted:     "#4F613A",
+	chroma.GenericHeading:      "#34548A bold",
+	chroma.GenericStrong:       "bold",
+	chroma.GenericEmph:         "italic",
+})
+
+// Paper uses Kanagawa Lotus, the light variant, so tokens stay legible in ink.
+var kanagawaPrint = chroma.MustNewStyle("king-of-lunch-kanagawa-print", chroma.StyleEntries{
 	chroma.Background:          "#1F1F28 bg:#F5F3EA",
 	chroma.Text:                "#1F1F28",
 	chroma.Error:               "#C84053",
@@ -69,8 +100,11 @@ var formatter = chromahtml.New(chromahtml.WithClasses(true), chromahtml.PreventS
 var highlightCSS = func() string {
 	var out bytes.Buffer
 	_ = formatter.WriteCSS(&out, kanagawa)
-	out.WriteString("@media print {\n")
+	out.WriteString("\n@media (prefers-color-scheme: light) {\n")
 	_ = formatter.WriteCSS(&out, kanagawaLotus)
+	out.WriteString("}\n")
+	out.WriteString("@media print {\n")
+	_ = formatter.WriteCSS(&out, kanagawaPrint)
 	out.WriteString("}\n")
 	return out.String()
 }()
